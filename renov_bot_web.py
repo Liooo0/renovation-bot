@@ -6,7 +6,7 @@
 """
 import html, json, os, urllib.request
 from uuid import uuid4
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, make_response, redirect
 import leadgen
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
