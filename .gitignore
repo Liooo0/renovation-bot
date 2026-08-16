@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+leads.db
+config.json
+kb.md
