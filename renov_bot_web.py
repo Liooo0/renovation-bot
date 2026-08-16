@@ -37,10 +37,11 @@ app = Flask(__name__)
 DB_PATH = leadgen.init_db(DB_PATH)
 
 
-def ask(q):
+def ask(history):
+    """history: [{role, content}, ...] 完整对话轮次,让 bot 带记忆回答。"""
     data = json.dumps({
         "model": "deepseek-chat",
-        "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": q}],
+        "messages": [{"role": "system", "content": SYSTEM}] + history,
         "max_tokens": 800, "temperature": 0.3,
     }).encode()
     req = urllib.request.Request("https://api.deepseek.com/chat/completions", data=data,
@@ -50,11 +51,12 @@ def ask(q):
         return json.loads(r.read())["choices"][0]["message"]["content"].strip()
 
 
-def capture_lead(sid, q):
-    """抽取 → 合并落库 → 成熟则钉钉通知。任何失败都不影响回答。"""
-    hist = leadgen.get_raw_msgs(DB_PATH, sid) + [q]
-    fields = leadgen.extract_lead(hist, KEY)
-    lead = leadgen.upsert_lead(DB_PATH, sid, fields, q)
+def capture_lead(sid, q, a):
+    """存对话轮次 + 抽取 → 合并落库 → 成熟则钉钉通知。任何失败都不影响回答。"""
+    msgs = leadgen.get_raw_msgs(DB_PATH, sid)
+    leadgen.append_turn(DB_PATH, sid, q, a)
+    fields = leadgen.extract_lead(msgs + [q], KEY)
+    lead = leadgen.upsert_lead(DB_PATH, sid, fields)
     leadgen.maybe_notify(DB_PATH, WEBHOOK, lead, DASH_URL, BUSINESS)
 
 
@@ -196,11 +198,12 @@ def answer():
     if not q:
         return jsonify({"a": "请输入问题"})
     try:
-        a = ask(q)
+        conv = leadgen.get_conversation(DB_PATH, sid)
+        a = ask(conv + [{"role": "user", "content": q}])
     except Exception as e:
         a = f"服务开小差了: {e}"
     try:
-        capture_lead(sid, q)
+        capture_lead(sid, q, a)
     except Exception:
         pass
     return jsonify({"a": a, "sid": sid})

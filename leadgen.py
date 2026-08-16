@@ -20,13 +20,14 @@ CREATE TABLE IF NOT EXISTS leads (
   intent_level TEXT DEFAULT '低',
   status TEXT DEFAULT 'new',
   raw_msgs TEXT DEFAULT '[]',
+  conversation TEXT DEFAULT '[]',
   created_at TEXT,
   updated_at TEXT,
   notified_at TEXT
 );
 """
 LEAD_COLS = ["id", "session_id", "area", "room_type", "budget", "start_time", "contact",
-             "notes", "intent_score", "intent_level", "status", "raw_msgs",
+             "notes", "intent_score", "intent_level", "status", "raw_msgs", "conversation",
              "created_at", "updated_at", "notified_at"]
 VALID_STATUS = ("new", "followed_up", "won", "ignored")
 
@@ -107,6 +108,9 @@ def init_db(path):
     conn = _connect(path)
     try:
         conn.execute(SCHEMA)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(leads)").fetchall()]
+        if "conversation" not in cols:
+            conn.execute("ALTER TABLE leads ADD COLUMN conversation TEXT DEFAULT '[]'")
         conn.commit()
     finally:
         conn.close()
@@ -137,6 +141,45 @@ def get_raw_msgs(path, session_id):
         return []
 
 
+def get_conversation(path, session_id):
+    """返回完整对话轮次 [{role, content}, ...],用于带记忆的回答生成。"""
+    lead = get_lead(path, session_id)
+    if not lead:
+        return []
+    try:
+        return json.loads(lead.get("conversation") or "[]")
+    except json.JSONDecodeError:
+        return []
+
+
+def append_turn(path, session_id, q, a):
+    """存一轮对话(客户问题 + bot 回答),并把客户消息同步进 raw_msgs。"""
+    conn = _connect(path)
+    try:
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute("INSERT OR IGNORE INTO leads (session_id, created_at, updated_at) VALUES (?,?,?)",
+                     (session_id, now, now))
+        row = _get_lead_conn(conn, session_id)
+        try:
+            conv = json.loads(row["conversation"] or "[]")
+        except json.JSONDecodeError:
+            conv = []
+        conv.append({"role": "user", "content": q})
+        conv.append({"role": "assistant", "content": a})
+        try:
+            msgs = json.loads(row["raw_msgs"] or "[]")
+        except json.JSONDecodeError:
+            msgs = []
+        msgs.append(q)
+        conn.execute("UPDATE leads SET conversation=?, raw_msgs=?, updated_at=? WHERE session_id=?",
+                     (json.dumps(conv, ensure_ascii=False), json.dumps(msgs, ensure_ascii=False),
+                      now, session_id))
+        conn.commit()
+        return _get_lead_conn(conn, session_id)
+    finally:
+        conn.close()
+
+
 def _merge_fields(old, new):
     out = {}
     for k in ("area", "room_type", "budget", "start_time", "contact", "notes"):
@@ -148,30 +191,27 @@ def _merge_fields(old, new):
     return out
 
 
-def upsert_lead(path, session_id, fields, new_msg):
+def upsert_lead(path, session_id, fields):
     """按会话累积合并成一张客户卡。返回最新 lead dict。"""
     conn = _connect(path)
     try:
         now = time.strftime("%Y-%m-%d %H:%M:%S")
         old = _get_lead_conn(conn, session_id)
         if old:
-            msgs = json.loads(old["raw_msgs"] or "[]")
-            msgs.append(new_msg)
             m = _merge_fields(old, fields)
             conn.execute(
                 "UPDATE leads SET area=?, room_type=?, budget=?, start_time=?, contact=?, notes=?,"
-                "intent_score=?, intent_level=?, raw_msgs=?, updated_at=? WHERE session_id=?",
+                "intent_score=?, intent_level=?, updated_at=? WHERE session_id=?",
                 (m["area"], m["room_type"], m["budget"], m["start_time"], m["contact"], m["notes"],
-                 m["intent_score"], m["intent_level"], json.dumps(msgs, ensure_ascii=False), now, session_id))
+                 m["intent_score"], m["intent_level"], now, session_id))
         else:
             conn.execute(
                 "INSERT INTO leads (session_id, area, room_type, budget, start_time, contact, notes,"
-                "intent_score, intent_level, raw_msgs, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "intent_score, intent_level, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (session_id, fields.get("area", ""), fields.get("room_type", ""), fields.get("budget", ""),
                  fields.get("start_time", ""), fields.get("contact", ""), fields.get("notes", ""),
-                 fields.get("intent_score", 0), fields.get("intent_level", "低"),
-                 json.dumps([new_msg], ensure_ascii=False), now, now))
+                 fields.get("intent_score", 0), fields.get("intent_level", "低"), now, now))
         conn.commit()
         return _get_lead_conn(conn, session_id)
     finally:
