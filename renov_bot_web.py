@@ -16,7 +16,7 @@ CONFIG = json.load(open(os.path.join(APP_DIR, "config.json"), encoding="utf-8"))
 KEY = leadgen.load_key()
 
 BUSINESS = CONFIG.get("business_name", "")
-CONSULTANT = CONFIG.get("consultant_name", "阿华")
+CONSULTANT = CONFIG.get("consultant_name", "阿迪")
 OWNER_PASS = str(CONFIG.get("owner_password", ""))
 WEBHOOK = CONFIG.get("dingtalk_webhook", "")
 DASH_URL = CONFIG.get("dashboard_url", "")
