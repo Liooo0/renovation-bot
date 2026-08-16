@@ -254,8 +254,42 @@ def list_leads(path, limit=100):
         conn.close()
 
 
+def _is_wecom(webhook):
+    return "qyapi.weixin.qq.com" in webhook
+
+
+def build_notify_payload(webhook, lead, dashboard_url, business_name, quote):
+    """按 webhook 类型生成推送载荷(企业微信 vs 钉钉),返回 bytes。"""
+    if _is_wecom(webhook):
+        content = (
+            f"**新客户 · {business_name}**\n"
+            f"意向:{lead.get('intent_level')} | 分:{lead.get('intent_score')}\n"
+            f"面积:{lead.get('area')}㎡ | 户型:{lead.get('room_type')}\n"
+            f"预算:{lead.get('budget')} | 计划:{lead.get('start_time')}\n"
+            f"联系方式:{lead.get('contact')}\n"
+            f"需求:{lead.get('notes')}\n"
+            f"\n[打开面板跟进]({dashboard_url})\n"
+            f"> {quote}"
+        )
+        return json.dumps({"msgtype": "markdown", "markdown": {"content": content}},
+                          ensure_ascii=False).encode()
+    text = (
+        f"### 🏠 新客户 · {business_name}\n\n"
+        f"- **意向:** {lead.get('intent_level')} | **意向分:** {lead.get('intent_score')}\n"
+        f"- **面积:** {lead.get('area')}㎡ | **户型:** {lead.get('room_type')}\n"
+        f"- **预算:** {lead.get('budget')} | **计划:** {lead.get('start_time')}\n"
+        f"- **联系方式:** {lead.get('contact')}\n"
+        f"- **需求:** {lead.get('notes')}\n"
+        f"\n[打开面板跟进]({dashboard_url})\n"
+        f"> {quote}"
+    )
+    return json.dumps({"msgtype": "markdown", "markdown": {"title": "新客户留资", "text": text}},
+                      ensure_ascii=False).encode()
+
+
 def maybe_notify(path, webhook, lead, dashboard_url, business_name):
-    """关键事件:首次拿到联系方式且意向≥中 → 钉钉 markdown 推送,24h 内同 lead 去重。"""
+    """关键事件:首次拿到联系方式且意向≥中 → 推送高意向客户,24h 内同 lead 去重。
+    自动识别 webhook 类型:企业微信(qyapi.weixin.qq.com)或钉钉(oapi.dingtalk.com)。"""
     if not webhook:
         return False
     if not (lead.get("contact") or "").strip():
@@ -275,19 +309,7 @@ def maybe_notify(path, webhook, lead, dashboard_url, business_name):
     except json.JSONDecodeError:
         msgs = []
     quote = " / ".join(str(m) for m in msgs[-2:]) or "(无原话)"
-    text = (
-        f"### 🏠 新客户 · {business_name}\n\n"
-        f"- **意向:** {lead.get('intent_level')} | **意向分:** {lead.get('intent_score')}\n"
-        f"- **面积:** {lead.get('area')}㎡ | **户型:** {lead.get('room_type')}\n"
-        f"- **预算:** {lead.get('budget')} | **计划:** {lead.get('start_time')}\n"
-        f"- **联系方式:** {lead.get('contact')}\n"
-        f"- **需求:** {lead.get('notes')}\n"
-        f"\n[打开面板跟进]({dashboard_url})\n"
-        f"> {quote}"
-    )
-    payload = json.dumps({"msgtype": "markdown",
-                          "markdown": {"title": "新客户留资", "text": text}},
-                         ensure_ascii=False).encode()
+    payload = build_notify_payload(webhook, lead, dashboard_url, business_name, quote)
     req = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:

@@ -18,7 +18,7 @@ KEY = leadgen.load_key()
 BUSINESS = CONFIG.get("business_name", "")
 CONSULTANT = CONFIG.get("consultant_name", "阿迪")
 OWNER_PASS = str(CONFIG.get("owner_password", ""))
-WEBHOOK = CONFIG.get("dingtalk_webhook", "")
+WEBHOOK = CONFIG.get("webhook") or CONFIG.get("dingtalk_webhook") or ""
 DASH_URL = CONFIG.get("dashboard_url", "")
 KB_FILE = CONFIG.get("kb_file", "kb_client.md")
 KB = open(os.path.join(APP_DIR, KB_FILE), encoding="utf-8").read()

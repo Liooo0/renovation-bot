@@ -4,6 +4,6 @@
   "owner_name": "老板",
   "kb_file": "kb_client.md",
   "owner_password": "改成你的面板密码",
-  "dingtalk_webhook": "钉钉群机器人 webhook(空=禁用)",
+  "webhook": "企业微信或钉钉 群机器人 webhook,二选一(空=禁用)",
   "dashboard_url": "http://服务器IP:8765/owner"
 }
