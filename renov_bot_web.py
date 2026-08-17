@@ -30,7 +30,13 @@ def _load_config():
 
 
 CONFIG = _load_config()
-KEY = leadgen.load_key()
+def _deepseek_key():
+    """惰性加载 DeepSeek key:环境变量优先,缺失时读 ~/.hermes/.env。
+    无 key 时返回空串(仅问答/抽取需要,老板面板与静态页面不依赖)。"""
+    try:
+        return leadgen.load_key()
+    except (RuntimeError, OSError):
+        return ""
 
 BUSINESS = CONFIG.get("business_name", "")
 CONSULTANT = CONFIG.get("consultant_name", "阿迪")
@@ -70,7 +76,7 @@ def ask(history):
     }).encode()
     req = urllib.request.Request("https://api.deepseek.com/chat/completions", data=data,
                                  headers={"Content-Type": "application/json",
-                                          "Authorization": f"Bearer {KEY}"})
+                                          "Authorization": f"Bearer {_deepseek_key()}"})
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())["choices"][0]["message"]["content"].strip()
 
@@ -79,7 +85,7 @@ def capture_lead(sid, q, a):
     """存对话轮次 + 抽取 → 合并落库 → 成熟则钉钉通知。任何失败都不影响回答。"""
     msgs = leadgen.get_raw_msgs(DB_PATH, sid)
     leadgen.append_turn(DB_PATH, sid, q, a)
-    fields = leadgen.extract_lead(msgs + [q], KEY)
+    fields = leadgen.extract_lead(msgs + [q], _deepseek_key())
     lead = leadgen.upsert_lead(DB_PATH, sid, fields)
     leadgen.maybe_notify(DB_PATH, WEBHOOK, lead, DASH_URL, BUSINESS)
 
