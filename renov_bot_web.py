@@ -4,15 +4,32 @@
 老板面板: http://0.0.0.0:8765/owner
 换客户  = 换 config.json + kb_client.md
 """
-import html, json, os, urllib.request
+import html
+import json
+import os
+import secrets
+import time
+import urllib.request
 from uuid import uuid4
-from flask import Flask, request, jsonify, make_response, redirect
+
 import leadgen
+from flask import Flask, jsonify, make_response, redirect, request
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_DIR, "leads.db")
 PORT = int(os.environ.get("PORT", "8765"))
-CONFIG = json.load(open(os.path.join(APP_DIR, "config.json"), encoding="utf-8"))
+
+
+def _load_config():
+    """config.json 优先,缺失时回退 config.example.json(便于新环境直接跑)。"""
+    for name in ("config.json", "config.example.json"):
+        path = os.path.join(APP_DIR, name)
+        if os.path.exists(path):
+            return json.load(open(path, encoding="utf-8"))
+    return {}
+
+
+CONFIG = _load_config()
 KEY = leadgen.load_key()
 
 BUSINESS = CONFIG.get("business_name", "")
@@ -22,6 +39,12 @@ WEBHOOK = CONFIG.get("webhook") or CONFIG.get("dingtalk_webhook") or ""
 DASH_URL = CONFIG.get("dashboard_url", "")
 KB_FILE = CONFIG.get("kb_file", "kb_client.md")
 KB = open(os.path.join(APP_DIR, KB_FILE), encoding="utf-8").read()
+MAX_TURNS = int(CONFIG.get("max_conversation_turns", 8))
+
+# 老板面板会话:随机 token → 过期时间(内存)。重启即失效,需重新登录。
+_owner_sessions = {}
+_SESSION_TTL = 60 * 60 * 24 * 30  # 30 天
+_COOKIE_NAME = "owner_session"
 
 SYSTEM = f"""你是「{CONSULTANT}」,{BUSINESS}的线上装修顾问。客户来咨询装修,你要:
 1. 只依据知识库回答报价/工期/案例/常见问题,库外信息说"这个我需要确认后答复"
@@ -38,10 +61,11 @@ DB_PATH = leadgen.init_db(DB_PATH)
 
 
 def ask(history):
-    """history: [{role, content}, ...] 完整对话轮次,让 bot 带记忆回答。"""
+    """history: [{role, content}, ...] 截断到最近 MAX_TURNS 轮,避免上下文无限增长。"""
+    window = history[-MAX_TURNS * 2:]
     data = json.dumps({
         "model": "deepseek-chat",
-        "messages": [{"role": "system", "content": SYSTEM}] + history,
+        "messages": [{"role": "system", "content": SYSTEM}] + window,
         "max_tokens": 800, "temperature": 0.3,
     }).encode()
     req = urllib.request.Request("https://api.deepseek.com/chat/completions", data=data,
@@ -61,8 +85,20 @@ def capture_lead(sid, q, a):
 
 
 def authed(req):
-    return OWNER_PASS == "" or req.cookies.get("owner_auth") == OWNER_PASS \
-        or req.args.get("pass") == OWNER_PASS
+    """老板面板鉴权:仅验证随机 session token,不接受 URL 传密码。
+
+    空密码默认拒绝访问(除非 config.json 显式设 allow_empty_password=true)。
+    """
+    if not OWNER_PASS and not CONFIG.get("allow_empty_password"):
+        return False
+    token = req.cookies.get(_COOKIE_NAME) or ""
+    exp = _owner_sessions.get(token)
+    if not exp:
+        return False
+    if time.time() > exp:
+        _owner_sessions.pop(token, None)
+        return False
+    return True
 
 
 # ---------------- 客户页 ----------------
@@ -219,10 +255,24 @@ def owner():
 @app.route("/owner/login", methods=["POST"])
 def owner_login():
     p = (request.form.get("pass") or "")
-    if OWNER_PASS and p != OWNER_PASS:
-        return OWNER_LOGIN
+    if OWNER_PASS:
+        if not secrets.compare_digest(p, OWNER_PASS):
+            return OWNER_LOGIN, 403
+    elif not CONFIG.get("allow_empty_password"):
+        return OWNER_LOGIN, 403
+    token = secrets.token_urlsafe(32)
+    _owner_sessions[token] = time.time() + _SESSION_TTL
     resp = make_response(redirect("/owner"))
-    resp.set_cookie("owner_auth", OWNER_PASS, max_age=60 * 60 * 24 * 30)
+    resp.set_cookie(_COOKIE_NAME, token, max_age=_SESSION_TTL, httponly=True, samesite="Lax")
+    return resp
+
+
+@app.route("/owner/logout", methods=["POST"])
+def owner_logout():
+    token = request.cookies.get(_COOKIE_NAME) or ""
+    _owner_sessions.pop(token, None)
+    resp = make_response(redirect("/owner"))
+    resp.delete_cookie(_COOKIE_NAME)
     return resp
 
 

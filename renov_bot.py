@@ -3,7 +3,10 @@
 用法: renov-bot.py --q "问题"   单次问答
       renov-bot.py              交互模式
 """
-import argparse, json, os, sys, urllib.request
+import argparse
+import json
+import os
+import urllib.request
 
 KEY = ""
 with open(os.path.expanduser("~/.hermes/.env")) as f:

@@ -4,7 +4,12 @@
 独立模块,可 CLI 单测:
     python leadgen.py --history '["89平三房,预算15万,十月装修","微信是138xxxx","半包多少钱"]'
 """
-import argparse, json, os, sqlite3, time, urllib.request
+import argparse
+import json
+import os
+import sqlite3
+import time
+import urllib.request
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS leads (
@@ -57,8 +62,64 @@ def _chat_json(system, user, key, max_tokens=400):
         return json.loads(r.read())["choices"][0]["message"]["content"].strip()
 
 
+# ---- 规则评分引擎(与 LLM 抽取解耦,保证业务规则确定性) ----
+
+SCORE_BUDGET = 30
+SCORE_AREA_ROOM = 25
+SCORE_START_TIME = 20
+SCORE_CONTACT = 15
+SCORE_URGENT = 10
+HIGH_THRESHOLD = 70
+MID_THRESHOLD = 40
+URGENT_WORDS = ("尽快", "着急", "想早点", "价格合适就定", "越快越好", "急", "早点定", "最近就装")
+
+DEFAULT_FIELDS = ("area", "room_type", "budget", "start_time", "contact", "notes")
+
+
+def has_urgent(text):
+    """客户原话里是否含急切需求词(独立于 LLM 判断)。"""
+    text = (text or "")
+    return any(w in text for w in URGENT_WORDS)
+
+
+def score_lead(fields):
+    """纯规则打分:预算30 + 面积/户型25 + 时间线20 + 联系方式15 + 急切词10,封顶100。
+
+    fields 来自 LLM 抽取(结构化) + 原始对话(急切词由本函数自行判断)。
+    返回 (intent_score, intent_level)。
+    """
+    score = 0
+    if str(fields.get("budget") or "").strip():
+        score += SCORE_BUDGET
+    if str(fields.get("area") or "").strip() or str(fields.get("room_type") or "").strip():
+        score += SCORE_AREA_ROOM
+    if str(fields.get("start_time") or "").strip():
+        score += SCORE_START_TIME
+    if str(fields.get("contact") or "").strip():
+        score += SCORE_CONTACT
+    if has_urgent(fields.get("raw_text")) or fields.get("urgent"):
+        score += SCORE_URGENT
+    score = min(100, max(0, score))
+    level = "高" if score >= HIGH_THRESHOLD else ("中" if score >= MID_THRESHOLD else "低")
+    return score, level
+
+
+def normalize_extract(out):
+    """清洗 LLM 抽取结果:补默认值、规范化类型。"""
+    for k in DEFAULT_FIELDS:
+        out.setdefault(k, "")
+        out[k] = str(out[k] or "").strip()
+    out["is_lead"] = bool(out.get("is_lead", True))
+    out["urgent"] = bool(out.get("urgent", False))
+    return out
+
+
 def extract_lead(history, key=None):
-    """从客户对话历史抽取结构化留资信息。失败抛异常,调用方兜底。"""
+    """从客户对话历史抽取结构化留资信息,评分交给 score_lead()。
+
+    LLM 只负责抽取,不参与打分 → 模型随机性不再污染业务规则。
+    失败抛异常,调用方兜底。
+    """
     key = key or load_key()
     system = (
         "你是装修获客系统的信息抽取器。从客户的咨询对话中抽取装修意向信息。"
@@ -70,13 +131,10 @@ def extract_lead(history, key=None):
         '  "budget": 预算或空字符串(如"15万"),\n'
         '  "start_time": 计划装修时间或空字符串(如"10月"),\n'
         '  "contact": 联系方式或空字符串(如"微信xxx"/"138xxxx"),\n'
-        '  "intent_score": 0-100整数,\n'
-        '  "intent_level": "高"/"中"/"低",\n'
+        '  "urgent": 客户是否表现出急切签约意愿(true/false),\n'
         '  "notes": 一句话客户需求摘要\n'
         "}\n"
-        "打分规则:有预算+30,有面积或户型+25,有时间线+20,有联系方式+15,"
-        "有急切需求词(尽快/着急/想早点/价格合适就定)+10,封顶100。"
-        "没提到的字段一律空字符串。intent_level:>=70高,40-69中,<40低。"
+        "没提到的字段一律空字符串。只输出 json,不要输出打分。"
     )
     content = _chat_json(system, "对话:\n" + "\n".join(f"- {m}" for m in history), key)
     try:
@@ -84,17 +142,10 @@ def extract_lead(history, key=None):
     except json.JSONDecodeError:
         start, end = content.find("{"), content.rfind("}")
         out = json.loads(content[start:end + 1])
-    for k in ("area", "room_type", "budget", "start_time", "contact", "notes"):
-        out.setdefault(k, "")
-        out[k] = str(out[k] or "").strip()
-    out["is_lead"] = bool(out.get("is_lead", True))
-    try:
-        out["intent_score"] = min(100, max(0, int(out.get("intent_score", 0) or 0)))
-    except (TypeError, ValueError):
-        out["intent_score"] = 0
-    if out.get("intent_level") not in ("高", "中", "低"):
-        s = out["intent_score"]
-        out["intent_level"] = "高" if s >= 70 else ("中" if s >= 40 else "低")
+    out = normalize_extract(out)
+    score, level = score_lead({**out, "raw_text": "\n".join(history)})
+    out["intent_score"] = score
+    out["intent_level"] = level
     return out
 
 

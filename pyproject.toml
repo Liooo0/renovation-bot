@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "SIM", "B", "S"]
+# BLE001/S110: web 兜底与通知失败静默是刻意设计,见 capture_lead/maybe_notify
+# S101: 测试中的 assert 属正常用法
+# S310: webhook 推送按配置指向外部 URL,属设计行为
+# S608: SQL 列名来自代码常量 LEAD_COLS,非用户输入
+# EXE001: 跨平台仓库不强制保留执行位
+# E501: HTML 模板/长中文行属存量风格,不强制重写
+# S104: 服务设计为 0.0.0.0 监听(客户页需局域网访问)
+# E731/B905/SIM115/SIM105/I001: 存量代码风格,渐进治理
+ignore = ["BLE001", "S110", "S101", "S310", "S608", "EXE001", "E501", "S104", "E731", "B905", "SIM115", "SIM105", "I001"]

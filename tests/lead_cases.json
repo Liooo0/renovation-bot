@@ -1,0 +1,12 @@
+[
+  {"name": "高意向-全要素", "fields": {"budget": "15万", "area": "89", "room_type": "三房", "start_time": "10月", "contact": "微信xxx", "urgent": true}, "expected": 100, "level": "高"},
+  {"name": "高意向-无急切词", "fields": {"budget": "15万", "area": "89", "room_type": "三房", "start_time": "10月", "contact": "微信xxx"}, "expected": 90, "level": "高"},
+  {"name": "中意向-有预算面积", "fields": {"budget": "15万", "area": "89", "room_type": "三房"}, "expected": 55, "level": "中"},
+  {"name": "中意向-无联系方式", "fields": {"area": "89", "start_time": "10月"}, "expected": 45, "level": "中"},
+  {"name": "低意向-只问价", "fields": {}, "expected": 0, "level": "低"},
+  {"name": "低意向-同行推销", "fields": {"notes": "卖瓷砖的想合作"}, "expected": 0, "level": "低"},
+  {"name": "边缘-有联系方式", "fields": {"contact": "138xxxx"}, "expected": 15, "level": "低"},
+  {"name": "边缘-急切词单触发", "fields": {"urgent": true}, "expected": 10, "level": "低"},
+  {"name": "中意向-面积+急切", "fields": {"area": "89", "urgent": true}, "expected": 35, "level": "低"},
+  {"name": "封顶100", "fields": {"budget": "1", "area": "1", "room_type": "1", "start_time": "1", "contact": "1", "urgent": true}, "expected": 100, "level": "高"}
+]
