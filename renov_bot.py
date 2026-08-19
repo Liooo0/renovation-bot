@@ -29,7 +29,7 @@ SYSTEM = f"""你是「装修管家小菲」——一位专业的装修咨询客�
 
 def ask(q):
     data = json.dumps({
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "messages": [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": q},

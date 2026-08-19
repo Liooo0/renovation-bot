@@ -50,7 +50,7 @@ def load_key():
 
 def _chat_json(system, user, key, max_tokens=400):
     data = json.dumps({
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "max_tokens": max_tokens, "temperature": 0.1,
         "response_format": {"type": "json_object"},

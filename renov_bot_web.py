@@ -70,7 +70,7 @@ def ask(history):
     """history: [{role, content}, ...] 截断到最近 MAX_TURNS 轮,避免上下文无限增长。"""
     window = history[-MAX_TURNS * 2:]
     data = json.dumps({
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "messages": [{"role": "system", "content": SYSTEM}] + window,
         "max_tokens": 800, "temperature": 0.3,
     }).encode()
