@@ -4,3 +4,7 @@ __pycache__/
 leads.db
 config.json
 kb.md
+
+# 本地备忘(含供应商报价/谈判话术,不外发)
+docs/qa-manual-test-15.md
+docs/talk-track-boss.md
