@@ -74,7 +74,7 @@ LLM 只做信息抽取(面积/户型/预算/时间/联系方式/急切词)
 ```bash
 git clone <repo-url> && cd renovation-bot
 cp config.example.json config.json   # 填公司名/客服名/面板密码
-cp kb_client.example.md kb_client.md # 或直接编辑示例库
+# 编辑 kb_client.md 填入公司资料(报价/工期/案例)
 ./deploy.sh                          # 启动 http://0.0.0.0:8765/
 ```
 
