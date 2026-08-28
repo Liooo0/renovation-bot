@@ -44,8 +44,24 @@ OWNER_PASS = str(CONFIG.get("owner_password", ""))
 WEBHOOK = CONFIG.get("webhook") or CONFIG.get("dingtalk_webhook") or ""
 DASH_URL = CONFIG.get("dashboard_url", "")
 KB_FILE = CONFIG.get("kb_file", "kb_client.md")
-KB = open(os.path.join(APP_DIR, KB_FILE), encoding="utf-8").read()
 MAX_TURNS = int(CONFIG.get("max_conversation_turns", 8))
+
+
+def _load_kb():
+    """行业库 kb.md(通用装修知识) + 公司库 kb_file(客户资料) 合并注入,双库分层。"""
+    parts = []
+    try:
+        parts.append(open(os.path.join(APP_DIR, "kb.md"), encoding="utf-8").read())
+    except OSError:
+        pass
+    try:
+        parts.append(open(os.path.join(APP_DIR, KB_FILE), encoding="utf-8").read())
+    except OSError:
+        pass
+    return "\n\n".join(parts)
+
+
+KB = _load_kb()
 
 # 老板面板会话:随机 token → 过期时间(内存)。重启即失效,需重新登录。
 _owner_sessions = {}
@@ -53,13 +69,13 @@ _SESSION_TTL = 60 * 60 * 24 * 30  # 30 天
 _COOKIE_NAME = "owner_session"
 
 SYSTEM = f"""你是「{CONSULTANT}」,{BUSINESS}的线上装修顾问。客户来咨询装修,你要:
-1. 只依据知识库回答报价/工期/案例/常见问题,库外信息说"这个我需要确认后答复"
+1. 行情/工艺/验收/避坑类问题优先依据《行业知识库》回答;本公司报价/案例/联系方式用《公司资料库》回答;库外信息说"这个我需要确认后答复"
 2. 回答具体、有数字、可执行
 3. 自然引导客户说出:面积、户型、预算、计划装修时间(别一次全问,顺其自然)
 4. 客户表示有意向时,自然地引导留微信或电话:"我加你微信发你报价单和案例图?" — 不硬推销
 5. 语气专业、亲切、简洁,用中文
 
-===知识库===
+===行业知识库===
 {KB}"""
 
 app = Flask(__name__)
@@ -111,34 +127,58 @@ def authed(req):
 CUSTOMER_PAGE = """<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>__TITLE__</title><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-body{background:#101820;color:#e8e8e8;font-family:"PingFang SC",sans-serif;margin:0;display:flex;flex-direction:column;height:100vh}
-header{padding:14px 20px;background:#1a2a3a;border-bottom:1px solid #2a3a4a}
-header h1{margin:0;font-size:18px}header p{margin:2px 0 0;font-size:12px;color:#8aa}
-#chat{flex:1;overflow-y:auto;padding:16px;max-width:760px;width:100%;margin:0 auto;box-sizing:border-box}
-.msg{margin:10px 0;max-width:85%;padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.7;white-space:pre-wrap}
-.user{margin-left:auto;background:#1f5f8f;border-bottom-right-radius:2px}
-.bot{background:#22303f;border-bottom-left-radius:2px}
-#inputbar{max-width:760px;width:100%;margin:0 auto;box-sizing:border-box;padding:12px 16px;display:flex;gap:8px}
-input{flex:1;padding:10px 12px;border-radius:8px;border:1px solid #3a4a5a;background:#182430;color:#eee;font-size:14px}
-button{padding:10px 18px;border-radius:8px;border:0;background:#1f6faf;color:#fff;font-size:14px;cursor:pointer}
-button:hover{background:#2a80c0}
-.tip{font-size:12px;color:#6a8;text-align:center;padding:4px 0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f6f3ee;color:#2b2622;font-family:"PingFang SC","Helvetica Neue",sans-serif;display:flex;flex-direction:column;height:100vh;height:100dvh}
+header{background:linear-gradient(135deg,#4a3728,#6b4f38);color:#fdfaf5;padding:16px 20px 14px;box-shadow:0 2px 12px rgba(0,0,0,.18);flex:0 0 auto}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:18px}
+header h1{font-size:17px;font-weight:600;letter-spacing:.5px}
+header p{font-size:12px;opacity:.78;margin-top:3px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 10px;max-width:680px;width:100%;margin:0 auto;flex:0 0 auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:0 0 auto;background:#fff;border:1px solid #e0d5c6;color:#6b4f38;border-radius:999px;padding:7px 14px;font-size:12.5px;cursor:pointer;transition:all .15s}
+.chips button:hover{background:#8a6648;color:#fff;border-color:#8a6648}
+#chat{flex:1;overflow-y:auto;padding:16px 14px;max-width:680px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:82%;animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.bubble{padding:10px 14px;border-radius:14px;font-size:14.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;display:block}
+.user{align-self:flex-end}.user .bubble{background:#8a6648;color:#fff;border-bottom-right-radius:4px}
+.bot{align-self:flex-start}.bot .bubble{background:#fff;border:1px solid #e8e0d4;border-bottom-left-radius:4px;box-shadow:0 1px 3px rgba(74,55,40,.06)}
+.time{display:block;font-size:10px;opacity:.55;margin-top:5px;text-align:right;padding:0 3px}
+.typing{display:inline-flex;gap:4px;padding:3px 0}
+.typing i{width:7px;height:7px;border-radius:50%;background:#b9a58f;animation:blink 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.25}40%{opacity:1}}
+#inputbar{max-width:680px;width:100%;margin:0 auto;padding:10px 14px calc(14px + env(safe-area-inset-bottom));display:flex;gap:8px;flex:0 0 auto}
+input{flex:1;padding:12px 14px;border-radius:12px;border:1px solid #ddd2c2;background:#fff;color:#2b2622;font-size:14.5px;outline:none;transition:border .15s}
+input:focus{border-color:#8a6648;box-shadow:0 0 0 3px rgba(138,102,72,.12)}
+#send{padding:12px 18px;border-radius:12px;border:0;background:#8a6648;color:#fff;font-size:14.5px;cursor:pointer;transition:background .15s}
+#send:hover{background:#75563c}#send:disabled{opacity:.5;cursor:not-allowed}
 </style></head><body>
-<header><h1>🏠 __TITLE__ <span style="font-size:12px;color:#8aa">__BUSINESS__</span></h1>
-<p>报价 / 工期 / 案例 · 线上咨询</p></header>
-<div id="chat"><div class="msg bot">你好,我是__CONSULTANT__。可以问我:半包全包多少钱?我家 89 平做下来多少?工期多久?有没有案例?要报价单留个微信就行。</div></div>
-<div class="tip">示例:半包多少钱一平? / 89平全包大概多少? / 你们工期多久?</div>
-<div id="inputbar"><input id="q" placeholder="输入你的装修问题…"><button onclick="ask()">发送</button></div>
+<header><div class="brand"><div class="logo">🏠</div><div><h1>__TITLE__</h1><p>__BUSINESS__ · 报价 / 工期 / 案例 · 线上咨询</p></div></div></header>
+<div class="chips" id="chips">
+<button onclick="ask(this.textContent)">半包和全包差多少钱？</button>
+<button onclick="ask(this.textContent)">89平全包大概多少？</button>
+<button onclick="ask(this.textContent)">装修工期要多久？</button>
+<button onclick="ask(this.textContent)">水电验收要看什么？</button>
+</div>
+<div id="chat"><div class="msg bot"><span class="bubble">你好，我是__CONSULTANT__。可以问我：半包全包多少钱？我家 89 平做下来多少？工期多久？有没有案例？要报价单留个微信就行。</span><span class="time"></span></div></div>
+<div id="inputbar"><input id="q" placeholder="输入你的装修问题…" enterkeyhint="send"><button id="send" onclick="send()">发送</button></div>
 <script>
 var sid=localStorage.getItem('sid');if(!sid){sid=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem('sid',sid);}
-function ask(){var q=document.getElementById('q');if(!q.value.trim())return;
-var question=q.value;add('user',question);var b=add('bot','思考中…');q.value='';
-fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:question,sid:sid})})
-.then(r=>r.json()).then(d=>{b.textContent=d.a;scroll()}).catch(()=>{b.textContent='服务开小差了,稍后再试';scroll()});
-}
-function add(who,t){var c=document.getElementById('chat');var m=document.createElement('div');m.className='msg '+who;m.textContent=t;c.appendChild(m);scroll();return m}
-function scroll(){document.getElementById('chat').scrollTop=99999}
-document.getElementById('q').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});
+var busy=false;
+function ts(){var d=new Date();return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
+function scroll(){var c=document.getElementById('chat');c.scrollTop=c.scrollHeight}
+function add(who,t){var c=document.getElementById('chat');var m=document.createElement('div');m.className='msg '+who;var b=document.createElement('span');b.className='bubble';b.textContent=t;m.appendChild(b);var tm=document.createElement('span');tm.className='time';tm.textContent=ts();m.appendChild(tm);c.appendChild(m);scroll();return m}
+function typing(){var c=document.getElementById('chat');var m=document.createElement('div');m.className='msg bot';var b=document.createElement('span');b.className='bubble typing';b.innerHTML='<i></i><i></i><i></i>';m.appendChild(b);c.appendChild(m);scroll();return m}
+function ask(q){q=(q||'').trim();if(busy||!q)return;busy=true;document.getElementById('send').disabled=true;
+add('user',q);var t=typing();
+fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q,sid:sid})})
+.then(function(r){return r.json()}).then(function(d){t.remove();add('bot',d.a)})
+.catch(function(){t.remove();add('bot','服务开小差了，稍后再试')})
+.finally(function(){busy=false;document.getElementById('send').disabled=false;scroll()});}
+function send(){var q=document.getElementById('q');ask(q.value);q.value=''}
+document.getElementById('q').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.isComposing)send()});
 </script></body></html>"""
 
 # ---------------- 老板面板 ----------------
