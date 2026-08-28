@@ -125,13 +125,13 @@ def authed(req):
 
 # ---------------- 客户页 ----------------
 CUSTOMER_PAGE = """<!doctype html><html lang="zh"><head><meta charset="utf-8">
-<title>__TITLE__</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title><link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36"><rect width="36" height="36" rx="10" fill="%23c47a4a"/><path d="M7.5 17.8 L18 9.6 L28.5 17.8" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.8 16.8 V26.4 H25.2 V16.8" stroke="white" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.8" y="20.8" width="9.6" height="7" rx="3.5" fill="white"/></svg>'><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#f6f3ee;color:#2b2622;font-family:"PingFang SC","Helvetica Neue",sans-serif;display:flex;flex-direction:column;height:100vh;height:100dvh}
 header{background:linear-gradient(135deg,#4a3728,#6b4f38);color:#fdfaf5;padding:16px 20px 14px;box-shadow:0 2px 12px rgba(0,0,0,.18);flex:0 0 auto}
 .brand{display:flex;align-items:center;gap:10px}
-.logo{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo{width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 header h1{font-size:17px;font-weight:600;letter-spacing:.5px}
 header p{font-size:12px;opacity:.78;margin-top:3px}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 10px;max-width:680px;width:100%;margin:0 auto;flex:0 0 auto;scrollbar-width:none}
@@ -155,7 +155,7 @@ input:focus{border-color:#8a6648;box-shadow:0 0 0 3px rgba(138,102,72,.12)}
 #send{padding:12px 18px;border-radius:12px;border:0;background:#8a6648;color:#fff;font-size:14.5px;cursor:pointer;transition:background .15s}
 #send:hover{background:#75563c}#send:disabled{opacity:.5;cursor:not-allowed}
 </style></head><body>
-<header><div class="brand"><div class="logo">🏠</div><div><h1>__TITLE__</h1><p>__BUSINESS__ · 报价 / 工期 / 案例 · 线上咨询</p></div></div></header>
+<header><div class="brand"><div class="logo"><svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="lg" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#e09568"/><stop offset="1" stop-color="#a8623f"/></linearGradient></defs><rect width="36" height="36" rx="10" fill="url(#lg)"/><path d="M7.5 17.8 L18 9.6 L28.5 17.8" stroke="#fdfaf5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.8 16.8 V26.4 H25.2 V16.8" stroke="#fdfaf5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><rect x="15.8" y="20.8" width="9.6" height="7" rx="3.5" fill="#fdfaf5"/><circle cx="18.4" cy="24.3" r="1" fill="#c47a4a"/><circle cx="21.2" cy="24.3" r="1" fill="#c47a4a"/><circle cx="24" cy="24.3" r="1" fill="#c47a4a"/></svg></div><div><h1>__TITLE__</h1><p>__BUSINESS__ · 报价 / 工期 / 案例 · 线上咨询</p></div></div></header>
 <div class="chips" id="chips">
 <button onclick="ask(this.textContent)">半包和全包差多少钱？</button>
 <button onclick="ask(this.textContent)">89平全包大概多少？</button>
